@@ -197,9 +197,10 @@ String buildConfigPage(String message = "") {
       <label>Device Hostname</label>
 )rawliteral";
 
-  html += "      <input type=\"text\" name=\"hostname\" value=\"" + activeHostname
-        + "\" maxlength=\"32\" pattern=\"[a-zA-Z0-9\\-]+\" required>";
+  html += "      <input type=\"text\" name=\"hostname\" id=\"hostnameField\" value=\"" + activeHostname
+        + "\" maxlength=\"32\" pattern=\"[a-zA-Z0-9\\-]+\" oninput=\"updatePreview()\" required>";
   html += "      <p class=\"note\">Letters, numbers, and hyphens only.</p>";
+  html += "      <p class=\"note\" style=\"color:#aaa;\">URL: <span id=\"urlPreview\" style=\"color:#fff;\">http://" + activeHostname + ".local/</span></p>";
 
   html += "      <label>Tally Output Pin</label>";
   html += "      <div class=\"lock-row\">";
@@ -258,6 +259,10 @@ String buildConfigPage(String message = "") {
     </form>
   </div>
   <script>
+    function updatePreview() {
+      var name = document.getElementById('hostnameField').value || 'tally-light';
+      document.getElementById('urlPreview').textContent = 'http://' + name + '.local/';
+    }
     function toggleStatic(el) {
       document.getElementById('staticFields').style.display =
         el.value === 'static' ? 'block' : 'none';
