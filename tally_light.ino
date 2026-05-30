@@ -345,6 +345,7 @@ void setup() {
   if (wifi_connected) Serial.println("Connected via WiFi.");
 
   MDNS.begin(activeHostname.c_str());
+  MDNS.addService("tally", "tcp", 80);
 
   // --- Config portal ---
   server.on("/", HTTP_GET, []() {
