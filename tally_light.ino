@@ -145,10 +145,10 @@ String buildConfigPage(String message = "") {
     .tally-label.on { color: #ff4444; }
     .btn-row { display: flex; gap: 10px; }
     .btn-row button { margin-top: 0; }
-    .btn-on  { background: #ff4444 !important; }
-    .btn-on:hover  { background: #cc3333 !important; }
-    .btn-off { background: #444 !important; }
-    .btn-off:hover { background: #555 !important; }
+    .btn-active   { background: #ff4444 !important; }
+    .btn-active:hover { background: #cc3333 !important; }
+    .btn-inactive { background: #444 !important; }
+    .btn-inactive:hover { background: #555 !important; }
   </style>
 </head>
 <body>
@@ -181,9 +181,11 @@ String buildConfigPage(String message = "") {
   html += "  <div class=\"tally-dot" + dotClass + "\" id=\"tallyDot\"></div>";
   html += "  <span class=\"tally-label" + labelClass + "\" id=\"tallyLabel\">TALLY " + tstate + "</span>";
   html += "</div>";
+  String onClass  = (tstate == "ON")  ? "btn-active" : "btn-inactive";
+  String offClass = (tstate == "OFF") ? "btn-active" : "btn-inactive";
   html += "<div class=\"btn-row\">";
-  html += "  <button class=\"btn-on\"  onclick=\"setTally('on')\">ON</button>";
-  html += "  <button class=\"btn-off\" onclick=\"setTally('off')\">OFF</button>";
+  html += "  <button id=\"btnOn\"  class=\"" + onClass  + "\" onclick=\"setTally('on')\">ON</button>";
+  html += "  <button id=\"btnOff\" class=\"" + offClass + "\" onclick=\"setTally('off')\">OFF</button>";
   html += "</div></div>";
 
   // Config card
@@ -267,6 +269,8 @@ String buildConfigPage(String message = "") {
           document.getElementById('tallyDot').className   = 'tally-dot'   + (on ? ' on' : '');
           document.getElementById('tallyLabel').className = 'tally-label' + (on ? ' on' : '');
           document.getElementById('tallyLabel').textContent = 'TALLY ' + state.toUpperCase();
+          document.getElementById('btnOn').className  = on ? 'btn-active' : 'btn-inactive';
+          document.getElementById('btnOff').className = on ? 'btn-inactive' : 'btn-active';
         });
     }
 )rawliteral";
