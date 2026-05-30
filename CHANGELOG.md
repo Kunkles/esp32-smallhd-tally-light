@@ -4,6 +4,13 @@ All notable changes to the Tally Bridge firmware.
 
 ---
 
+## v5.4 — 2026-05-30
+
+- Static IP support — IP, Gateway, Subnet, DNS configurable via web portal
+- IP mode (DHCP/Static) shown in status card and `/status` endpoint
+- Factory Reset button added to web portal — clears all NVS settings and reboots to defaults
+- Static fields show/hide dynamically based on IP mode selection
+
 ## v5.3 — 2026-05-30
 
 - Added web config portal at `/` and `/config`

@@ -6,6 +6,51 @@ HTTP tally bridge for SmallHD monitors. Receives HTTP GET requests from Bitfocus
 
 ---
 
+## Setup & Deployment
+
+### First Flash
+
+Flash the firmware once — all configuration is done through the browser after that. No need to edit the sketch per unit.
+
+1. Open `tally_light.ino` in Arduino IDE
+2. Set board to **ESP32S3 Dev Module**, ESP32 Arduino core v3.x
+3. Under **Tools → Erase All Flash Before Sketch Upload → Enabled** (ensures a clean state)
+4. Flash the board
+
+### Configure via Web Portal
+
+After flashing, open a browser and go to:
+
+```
+http://tally-light.local/
+```
+
+or use the IP address shown in the serial monitor if mDNS isn't resolving.
+
+From the portal you can set:
+
+- **Device Hostname** — unique name for this unit (e.g. `tally-cam1`). Becomes the `.local` address.
+- **IP Mode** — DHCP or Static. Static reveals fields for IP, Gateway, Subnet, and DNS.
+- **WiFi SSID & Password** — fallback network if Ethernet is not connected.
+
+Hit **Save & Reboot** — all settings are stored in flash and survive reboots and reflashes.
+
+### Deploying Multiple Units
+
+1. Flash all units with the same firmware (no per-unit sketch changes needed)
+2. Connect each unit and open `http://tally-light.local/` in a browser
+3. Set a unique hostname for each unit (e.g. `tally-cam1`, `tally-cam2`)
+4. Optionally assign a static IP for each unit for reliable Companion integration
+5. Use IP addresses in Companion, not `.local` hostnames — mDNS can be unreliable on managed networks
+
+### Factory Reset
+
+To wipe all saved settings and return a unit to defaults, open the web portal and click **Reset to Defaults** at the bottom of the page. The device reboots as `tally-light` with DHCP enabled.
+
+Alternatively, enable **Erase All Flash Before Sketch Upload** in Arduino IDE before reflashing for a full clean state.
+
+---
+
 ## Hardware
 
 | Component | Value |
@@ -46,7 +91,7 @@ HTTP tally bridge for SmallHD monitors. Receives HTTP GET requests from Bitfocus
 | `OUT` | GPI active pin |
 | `GND` | GPI ground pin |
 
-> **Tip:** Use an Ethernet screw terminal breakout board (e.g. [Poyiccot RJ45 screw terminal](https://www.amazon.com/dp/B07WKKVZRF)) on the SmallHD end rather than cutting a cable. Direct bare-wire connections to the optocoupler are unreliable due to the thin 24AWG solid-core conductors in Ethernet cable. The screw terminal block gives a proper mechanical clamp.
+> **Tip:** Use an Ethernet screw terminal breakout board (e.g. [Poyiccot RJ45 screw terminal](https://www.amazon.com/dp/B07WKKVZRF)) on the SmallHD end rather than cutting a cable. Direct bare-wire connections are unreliable due to the thin 24AWG solid-core conductors in Ethernet cable. The screw terminal block gives a proper mechanical clamp.
 
 ---
 
@@ -57,37 +102,11 @@ HTTP tally bridge for SmallHD monitors. Receives HTTP GET requests from Bitfocus
 | PageOS version required | 6.x or later |
 | GPI function | Tally Indicator |
 | Polarity | Active High |
-| GPI pin | Pin 7 (not Pin 1) |
+| GPI pin | **Pin 7** (not Pin 1) |
 
 > **Important:** Pin 1 does not behave correctly for tally on the OLED 22 — use Pin 7. Polarity is Active High. Tally behavior: open circuit = ON, contact closure = OFF. Verified on hardware running PageOS 6.3.1.
 >
 > Other SmallHD models in a mixed fleet may require different GPI pin and polarity settings. Bench test each model before deployment.
-
----
-
-## Setup & Deployment
-
-### First Flash
-
-1. Open `tally_light.ino` in Arduino IDE
-2. Set board to **ESP32S3 Dev Module**, ESP32 Arduino core v3.x
-3. Set `DEFAULT_HOSTNAME` at the top of the sketch (e.g. `tally-cam1`)
-4. Flash the board
-
-### Per-Unit Configuration (Web Portal)
-
-After flashing, each unit can be renamed and have its WiFi credentials set without reflashing:
-
-1. Connect the unit via Ethernet or WiFi
-2. Open a browser and go to `http://<device-ip>/` or `http://tally-light.local/`
-3. Set the **Device Hostname** and **WiFi SSID/Password**
-4. Hit **Save & Reboot** — settings persist in flash across reboots
-
-### Deploying Multiple Units
-
-- Flash all units with the same firmware
-- Configure each unit's hostname via the web portal after deployment
-- Use IP addresses (not `.local`) in Companion for production reliability — mDNS can be inconsistent on managed/VLAN'd networks
 
 ---
 
@@ -97,10 +116,11 @@ After flashing, each unit can be renamed and have its WiFi credentials set witho
 | :--- | :--- | :--- |
 | `/` | GET | Web config portal |
 | `/config` | GET / POST | Web config portal (same as `/`) |
+| `/reset` | POST | Clear all saved settings and reboot to defaults |
 | `/tally/on` | GET | Activate tally (GPIO HIGH) |
 | `/tally/off` | GET | Deactivate tally (GPIO LOW) |
 | `/tally/test` | GET | 1-second tally pulse for testing |
-| `/status` | GET | Returns firmware version, IP, interface, and tally state |
+| `/status` | GET | Returns firmware version, IP, interface, IP mode, and tally state |
 
 ---
 
@@ -115,7 +135,7 @@ Use **Generic: HTTP GET** action.
 | Test | `http://<device-ip>/tally/test` |
 | Status | `http://<device-ip>/status` |
 
-For production, use IP addresses over `.local` hostnames. Assign static IPs via your DHCP server using each unit's MAC address.
+Use static IPs and enter them directly in Companion. mDNS `.local` addresses are convenient for setup but unreliable in production on managed or VLAN'd networks.
 
 ---
 

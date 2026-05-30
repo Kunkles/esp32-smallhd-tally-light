@@ -21,7 +21,7 @@ const int TALLY_PIN = 18;
 #define ETH_PHY_ADDR    1
 
 // --- FIRMWARE VERSION ---
-const char* FW_VERSION = "v5.3";
+const char* FW_VERSION = "v5.4";
 
 // --- DEFAULTS (used only on first boot, overridden by web portal) ---
 const char* DEFAULT_HOSTNAME = "tally-light";
@@ -32,6 +32,8 @@ Preferences prefs;
 String activeHostname;
 String activeSSID;
 String activePass;
+String ipMode;          // "dhcp" or "static"
+IPAddress staticIP, staticGW, staticSN, staticDNS;
 
 WebServer server(80);
 bool eth_connected = false;
@@ -43,6 +45,8 @@ void NetworkEvent(arduino_event_id_t event) {
   switch (event) {
     case ARDUINO_EVENT_ETH_START:
       ETH.setHostname(activeHostname.c_str());
+      if (ipMode == "static")
+        ETH.config(staticIP, staticGW, staticSN, staticDNS);
       break;
     case ARDUINO_EVENT_ETH_CONNECTED:
       Serial.println("Ethernet cable connected");
@@ -87,6 +91,7 @@ String buildConfigPage(String message = "") {
   String ip     = eth_connected ? ETH.localIP().toString() : WiFi.localIP().toString();
   String iface  = eth_connected ? "Ethernet" : "WiFi";
   String tstate = digitalRead(TALLY_PIN) ? "ON" : "OFF";
+  bool   isStatic = (ipMode == "static");
 
   String html = R"rawliteral(
 <!DOCTYPE html>
@@ -113,6 +118,9 @@ String buildConfigPage(String message = "") {
                            color: #fff; font-size: 1em; }
     input[type=text]:focus,
     input[type=password]:focus { outline: none; border-color: #ff4444; }
+    .radio-group { display: flex; gap: 12px; margin: 4px 0 8px; }
+    .radio-group label { margin: 0; display: flex; align-items: center; gap: 6px;
+                         color: #eee; font-size: 1em; cursor: pointer; }
     button { width: 100%; margin-top: 16px; padding: 12px; background: #ff4444;
              color: #fff; border: none; border-radius: 6px; font-size: 1em; cursor: pointer; }
     button:hover { background: #cc3333; }
@@ -122,6 +130,7 @@ String buildConfigPage(String message = "") {
             padding: 10px 14px; margin-bottom: 16px; color: #cc8888; font-size: 0.9em; }
     .note { color: #666; font-size: 0.8em; margin-top: 8px; }
     .divider { border: none; border-top: 1px solid #3a3a3a; margin: 16px 0; }
+    #staticFields { display: none; }
   </style>
 </head>
 <body>
@@ -141,10 +150,11 @@ String buildConfigPage(String message = "") {
   html += "<div class=\"stat\"><span>Device Name</span><span>" + activeHostname + "</span></div>";
   html += "<div class=\"stat\"><span>Interface</span><span>" + iface + "</span></div>";
   html += "<div class=\"stat\"><span>IP Address</span><span>" + ip + "</span></div>";
+  html += "<div class=\"stat\"><span>IP Mode</span><span>" + ipMode + "</span></div>";
   html += "<div class=\"stat\"><span>Tally State</span><span>" + tstate + "</span></div>";
   html += "</div>";
 
-  // Config card — single form, two sections
+  // Config card
   html += R"rawliteral(
   <div class="card">
     <h2>Configure</h2>
@@ -159,17 +169,62 @@ String buildConfigPage(String message = "") {
 
   html += "      <hr class=\"divider\">";
 
+  // IP mode radios
+  html += "      <label>IP Mode</label>";
+  html += "      <div class=\"radio-group\">";
+  html += "        <label><input type=\"radio\" name=\"ipmode\" value=\"dhcp\""
+        + String(!isStatic ? " checked" : "") + " onchange=\"toggleStatic(this)\"> DHCP</label>";
+  html += "        <label><input type=\"radio\" name=\"ipmode\" value=\"static\""
+        + String(isStatic ? " checked" : "") + " onchange=\"toggleStatic(this)\"> Static</label>";
+  html += "      </div>";
+
+  // Static IP fields — pre-filled if currently in static mode
+  html += "      <div id=\"staticFields\">";
+  html += "        <label>IP Address</label>";
+  html += "        <input type=\"text\" name=\"ip\" value=\"" + staticIP.toString() + "\" placeholder=\"192.168.1.100\">";
+  html += "        <label>Gateway</label>";
+  html += "        <input type=\"text\" name=\"gw\" value=\"" + staticGW.toString() + "\" placeholder=\"192.168.1.1\">";
+  html += "        <label>Subnet Mask</label>";
+  html += "        <input type=\"text\" name=\"sn\" value=\"" + staticSN.toString() + "\" placeholder=\"255.255.255.0\">";
+  html += "        <label>DNS Server</label>";
+  html += "        <input type=\"text\" name=\"dns\" value=\"" + staticDNS.toString() + "\" placeholder=\"8.8.8.8\">";
+  html += "      </div>";
+
+  html += "      <hr class=\"divider\">";
+
   html += "      <label>WiFi SSID</label>";
   html += "      <input type=\"text\" name=\"ssid\" value=\"" + activeSSID + "\" maxlength=\"64\">";
-
   html += "      <label>WiFi Password</label>";
   html += "      <input type=\"password\" name=\"pass\" placeholder=\"leave blank to keep current\" maxlength=\"64\">";
   html += "      <p class=\"note\">Only used if Ethernet is not connected.</p>";
+
+  // Show static fields immediately if currently in static mode, else JS handles it
+  String initScript = isStatic
+    ? "document.getElementById('staticFields').style.display='block';"
+    : "";
 
   html += R"rawliteral(
       <button type="submit">Save &amp; Reboot</button>
     </form>
   </div>
+
+  <div class="card">
+    <h2>Factory Reset</h2>
+    <p class="note" style="margin:0 0 12px;">Clears all saved settings and reboots. Device will return to firmware defaults.</p>
+    <form method="POST" action="/reset" onsubmit="return confirm('Reset all settings to factory defaults?')">
+      <button type="submit" style="background:#555;">Reset to Defaults</button>
+    </form>
+  </div>
+  <script>
+    function toggleStatic(el) {
+      document.getElementById('staticFields').style.display =
+        el.value === 'static' ? 'block' : 'none';
+    }
+)rawliteral";
+
+  html += "    " + initScript;
+  html += R"rawliteral(
+  </script>
 </body>
 </html>
 )rawliteral";
@@ -183,14 +238,22 @@ void setup() {
   Serial.begin(115200);
   delay(500);
 
-  // Load settings from flash — fall back to defaults on first boot
+  // Load all settings from flash — fall back to defaults on first boot
   prefs.begin("tally", false);
   activeHostname = prefs.getString("hostname", DEFAULT_HOSTNAME);
   activeSSID     = prefs.getString("ssid",     DEFAULT_WIFI_SSID);
   activePass     = prefs.getString("pass",     DEFAULT_WIFI_PASS);
+  ipMode         = prefs.getString("ipmode",   "dhcp");
+
+  staticIP.fromString(prefs.getString("ip",  "192.168.1.100"));
+  staticGW.fromString(prefs.getString("gw",  "192.168.1.1"));
+  staticSN.fromString(prefs.getString("sn",  "255.255.255.0"));
+  staticDNS.fromString(prefs.getString("dns", "8.8.8.8"));
 
   Serial.println("Hostname: " + activeHostname);
-  Serial.println("WiFi SSID: " + activeSSID);
+  Serial.println("IP Mode:  " + ipMode);
+  if (ipMode == "static")
+    Serial.println("Static IP: " + staticIP.toString());
 
   pinMode(TALLY_PIN, OUTPUT);
   digitalWrite(TALLY_PIN, HIGH); // default HIGH — tally OFF
@@ -204,6 +267,8 @@ void setup() {
             SPI2_HOST, ETH_SCK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN);
 
   WiFi.setHostname(activeHostname.c_str());
+  if (ipMode == "static")
+    WiFi.config(staticIP, staticGW, staticSN, staticDNS);
   WiFi.begin(activeSSID.c_str(), activePass.c_str());
 
   Serial.println("Waiting for network...");
@@ -241,15 +306,32 @@ void setup() {
 
     if (server.hasArg("ssid") && server.arg("ssid").length() > 0)
       prefs.putString("ssid", server.arg("ssid"));
-
-    // Only update password if user typed a new one
     if (server.hasArg("pass") && server.arg("pass").length() > 0)
       prefs.putString("pass", server.arg("pass"));
+
+    String newMode = server.hasArg("ipmode") ? server.arg("ipmode") : "dhcp";
+    prefs.putString("ipmode", newMode);
+
+    if (newMode == "static") {
+      if (server.hasArg("ip"))  prefs.putString("ip",  server.arg("ip"));
+      if (server.hasArg("gw"))  prefs.putString("gw",  server.arg("gw"));
+      if (server.hasArg("sn"))  prefs.putString("sn",  server.arg("sn"));
+      if (server.hasArg("dns")) prefs.putString("dns", server.arg("dns"));
+    }
 
     server.send(200, "text/html",
       buildConfigPage("&#10003; Settings saved — rebooting now..."));
     delay(2000);
     prefs.end(); // flush to flash before reboot
+    ESP.restart();
+  });
+
+  // --- Factory reset ---
+  server.on("/reset", HTTP_POST, []() {
+    prefs.clear();
+    server.send(200, "text/html", buildConfigPage("&#10003; Settings cleared — rebooting to defaults..."));
+    delay(2000);
+    prefs.end();
     ESP.restart();
   });
 
@@ -277,7 +359,7 @@ void setup() {
     String s     = digitalRead(TALLY_PIN) ? "ON" : "OFF";
     server.send(200, "text/plain",
       "Tally Bridge " + String(FW_VERSION) + " | " + iface + " IP: " + ip
-      + " | Tally: " + s + " | Host: " + activeHostname);
+      + " | Mode: " + ipMode + " | Tally: " + s + " | Host: " + activeHostname);
   });
 
   server.begin();
