@@ -21,7 +21,7 @@ const int DEFAULT_TALLY_PIN = 18;
 #define ETH_PHY_ADDR    1
 
 // --- FIRMWARE VERSION ---
-const char* FW_VERSION = "v5.6";
+const char* FW_VERSION = "v5.7";
 
 // --- DEFAULTS (used only on first boot, overridden by web portal) ---
 const char* DEFAULT_HOSTNAME = "tally-light";
