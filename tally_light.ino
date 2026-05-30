@@ -307,7 +307,7 @@ void setup() {
     Serial.println("Static IP: " + staticIP.toString());
 
   pinMode(activePin, OUTPUT);
-  digitalWrite(activePin, HIGH); // default HIGH — tally OFF
+  digitalWrite(activePin, LOW); // default LOW — tally OFF
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
