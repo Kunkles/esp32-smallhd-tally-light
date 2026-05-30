@@ -20,11 +20,13 @@ const int TALLY_PIN = 18;
 #define ETH_PHY_ADDR    1
 
 // --- DEVICE IDENTITY ---
-const char* HOSTNAME = "tally-stage06b";
-
+const char* HOSTNAME = "tally-stage06b";  /// Change this per device access device with: 
+                                          /// http://tally-stage06b/status
+                                          ///  http://tally-stage06b/tally/on
+                                          ///  http://tally-stage06b/tally/off
 // --- WIFI CREDENTIALS ---
-const char* WIFI_SSID = "NSA Probe";
-const char* WIFI_PASS = "12345678";
+const char* WIFI_SSID = "YOUR_SSID"; /// Change this to your local network
+const char* WIFI_PASS = "YOUR_PASSWORD"; /// if you arent hardlined
 
 WebServer server(80);
 bool eth_connected = false;
