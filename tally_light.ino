@@ -21,7 +21,7 @@ const int DEFAULT_TALLY_PIN = 18;
 #define ETH_PHY_ADDR    1
 
 // --- FIRMWARE VERSION ---
-const char* FW_VERSION = "v5.7";
+const char* FW_VERSION = "v5.8";
 
 // --- DEFAULTS (used only on first boot, overridden by web portal) ---
 const char* DEFAULT_HOSTNAME = "tally-light";
@@ -166,11 +166,11 @@ String buildConfigPage(String message = "") {
   // Status card
   html += "<div class=\"card\"><h2>Status</h2>";
   html += "<div class=\"stat\"><span>Device Name</span><span>" + activeHostname + "</span></div>";
-  html += "<div class=\"stat\"><span>Interface</span><span>" + iface + "</span></div>";
-  html += "<div class=\"stat\"><span>IP Address</span><span>" + ip + "</span></div>";
+  html += "<div class=\"stat\"><span>Interface</span><span id=\"statusIface\">" + iface + "</span></div>";
+  html += "<div class=\"stat\"><span>IP Address</span><span id=\"statusIP\">" + ip + "</span></div>";
   html += "<div class=\"stat\"><span>IP Mode</span><span>" + ipMode + "</span></div>";
   html += "<div class=\"stat\"><span>Tally Pin</span><span>GPIO" + String(activePin) + "</span></div>";
-  html += "<div class=\"stat\"><span>Tally State</span><span>" + tstate + "</span></div>";
+  html += "<div class=\"stat\"><span>Tally State</span><span id=\"statusTally\">" + tstate + "</span></div>";
   html += "</div>";
 
   // Tally control card
@@ -263,6 +263,28 @@ String buildConfigPage(String message = "") {
       var name = document.getElementById('hostnameField').value || 'tally-light';
       document.getElementById('urlPreview').textContent = 'http://' + name + '.local/';
     }
+    function pollStatus() {
+      fetch('/status')
+        .then(function(r) { return r.text(); })
+        .then(function(txt) {
+          var on = txt.indexOf('Tally: ON') !== -1;
+          // Status card
+          var st = document.getElementById('statusTally');
+          if (st) st.textContent = on ? 'ON' : 'OFF';
+          var ip = txt.match(/IP: ([^\s|]+)/);
+          if (ip) { var el = document.getElementById('statusIP'); if (el) el.textContent = ip[1]; }
+          var iface = txt.indexOf('Ethernet') !== -1 ? 'Ethernet' : 'WiFi';
+          var fi = document.getElementById('statusIface'); if (fi) fi.textContent = iface;
+          // Tally control card
+          document.getElementById('tallyDot').className   = 'tally-dot'   + (on ? ' on' : '');
+          document.getElementById('tallyLabel').className = 'tally-label' + (on ? ' on' : '');
+          document.getElementById('tallyLabel').textContent = 'TALLY ' + (on ? 'ON' : 'OFF');
+          document.getElementById('btnOn').className  = on ? 'btn-active' : 'btn-inactive';
+          document.getElementById('btnOff').className = on ? 'btn-inactive' : 'btn-active';
+        })
+        .catch(function() {}); // silently ignore if device is busy
+    }
+    setInterval(pollStatus, 3000);
     function toggleStatic(el) {
       document.getElementById('staticFields').style.display =
         el.value === 'static' ? 'block' : 'none';
