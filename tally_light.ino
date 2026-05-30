@@ -20,16 +20,18 @@ const int TALLY_PIN = 18;
 #define ETH_RST_PIN     9
 #define ETH_PHY_ADDR    1
 
-// --- DEFAULT DEVICE IDENTITY ---
-// Used only on first boot. After that, the name saved via the web portal takes over.
-const char* DEFAULT_HOSTNAME = "tally-stage06b";
+// --- FIRMWARE VERSION ---
+const char* FW_VERSION = "v5.3";
 
-// --- WIFI CREDENTIALS ---
-const char* WIFI_SSID = "YOUR_SSID";     /// Change this to your local network
-const char* WIFI_PASS = "YOUR_PASSWORD"; /// if you arent hardlined
+// --- DEFAULTS (used only on first boot, overridden by web portal) ---
+const char* DEFAULT_HOSTNAME = "tally-light";
+const char* DEFAULT_WIFI_SSID = "YOUR_SSID";
+const char* DEFAULT_WIFI_PASS = "YOUR_PASSWORD";
 
 Preferences prefs;
 String activeHostname;
+String activeSSID;
+String activePass;
 
 WebServer server(80);
 bool eth_connected = false;
@@ -103,12 +105,15 @@ String buildConfigPage(String message = "") {
                text-transform: uppercase; letter-spacing: 0.08em; }
     .stat { display: flex; justify-content: space-between; margin: 6px 0; font-size: 0.95em; }
     .stat span:last-child { color: #fff; font-weight: bold; }
-    label { display: block; margin-bottom: 6px; color: #aaa; font-size: 0.9em; }
-    input[type=text] { width: 100%; box-sizing: border-box; padding: 10px;
-                       background: #333; border: 1px solid #444; border-radius: 6px;
-                       color: #fff; font-size: 1em; }
-    input[type=text]:focus { outline: none; border-color: #ff4444; }
-    button { width: 100%; margin-top: 12px; padding: 12px; background: #ff4444;
+    label { display: block; margin-top: 12px; margin-bottom: 6px; color: #aaa; font-size: 0.9em; }
+    label:first-of-type { margin-top: 0; }
+    input[type=text],
+    input[type=password] { width: 100%; box-sizing: border-box; padding: 10px;
+                           background: #333; border: 1px solid #444; border-radius: 6px;
+                           color: #fff; font-size: 1em; }
+    input[type=text]:focus,
+    input[type=password]:focus { outline: none; border-color: #ff4444; }
+    button { width: 100%; margin-top: 16px; padding: 12px; background: #ff4444;
              color: #fff; border: none; border-radius: 6px; font-size: 1em; cursor: pointer; }
     button:hover { background: #cc3333; }
     .msg  { background: #2a4a2a; border: 1px solid #4a7a4a; border-radius: 6px;
@@ -116,6 +121,7 @@ String buildConfigPage(String message = "") {
     .err  { background: #4a2a2a; border: 1px solid #7a4a4a; border-radius: 6px;
             padding: 10px 14px; margin-bottom: 16px; color: #cc8888; font-size: 0.9em; }
     .note { color: #666; font-size: 0.8em; margin-top: 8px; }
+    .divider { border: none; border-top: 1px solid #3a3a3a; margin: 16px 0; }
   </style>
 </head>
 <body>
@@ -123,11 +129,14 @@ String buildConfigPage(String message = "") {
   <div class="sub">SmallHD Tally Controller</div>
 )rawliteral";
 
+  html += "  <div class=\"sub\" style=\"margin-top:-18px; margin-bottom:20px;\">Firmware " + String(FW_VERSION) + "</div>";
+
   if (message.length() > 0) {
     bool isErr = message.startsWith("&#10007;");
     html += "<div class=\"" + String(isErr ? "err" : "msg") + "\">" + message + "</div>";
   }
 
+  // Status card
   html += "<div class=\"card\"><h2>Status</h2>";
   html += "<div class=\"stat\"><span>Device Name</span><span>" + activeHostname + "</span></div>";
   html += "<div class=\"stat\"><span>Interface</span><span>" + iface + "</span></div>";
@@ -135,17 +144,29 @@ String buildConfigPage(String message = "") {
   html += "<div class=\"stat\"><span>Tally State</span><span>" + tstate + "</span></div>";
   html += "</div>";
 
+  // Config card — single form, two sections
   html += R"rawliteral(
   <div class="card">
     <h2>Configure</h2>
     <form method="POST" action="/config">
+
       <label>Device Hostname</label>
 )rawliteral";
 
   html += "      <input type=\"text\" name=\"hostname\" value=\"" + activeHostname
         + "\" maxlength=\"32\" pattern=\"[a-zA-Z0-9\\-]+\" required>";
+  html += "      <p class=\"note\">Letters, numbers, and hyphens only.</p>";
+
+  html += "      <hr class=\"divider\">";
+
+  html += "      <label>WiFi SSID</label>";
+  html += "      <input type=\"text\" name=\"ssid\" value=\"" + activeSSID + "\" maxlength=\"64\">";
+
+  html += "      <label>WiFi Password</label>";
+  html += "      <input type=\"password\" name=\"pass\" placeholder=\"leave blank to keep current\" maxlength=\"64\">";
+  html += "      <p class=\"note\">Only used if Ethernet is not connected.</p>";
+
   html += R"rawliteral(
-      <p class="note">Letters, numbers, and hyphens only. Device will reboot to apply.</p>
       <button type="submit">Save &amp; Reboot</button>
     </form>
   </div>
@@ -162,10 +183,14 @@ void setup() {
   Serial.begin(115200);
   delay(500);
 
-  // Load hostname from flash — falls back to DEFAULT_HOSTNAME on first boot
+  // Load settings from flash — fall back to defaults on first boot
   prefs.begin("tally", false);
   activeHostname = prefs.getString("hostname", DEFAULT_HOSTNAME);
+  activeSSID     = prefs.getString("ssid",     DEFAULT_WIFI_SSID);
+  activePass     = prefs.getString("pass",     DEFAULT_WIFI_PASS);
+
   Serial.println("Hostname: " + activeHostname);
+  Serial.println("WiFi SSID: " + activeSSID);
 
   pinMode(TALLY_PIN, OUTPUT);
   digitalWrite(TALLY_PIN, HIGH); // default HIGH — tally OFF
@@ -179,7 +204,7 @@ void setup() {
             SPI2_HOST, ETH_SCK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN);
 
   WiFi.setHostname(activeHostname.c_str());
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  WiFi.begin(activeSSID.c_str(), activePass.c_str());
 
   Serial.println("Waiting for network...");
   unsigned long start = millis();
@@ -206,17 +231,26 @@ void setup() {
   });
 
   server.on("/config", HTTP_POST, []() {
-    if (server.hasArg("hostname") && server.arg("hostname").length() > 0) {
-      String newName = server.arg("hostname");
-      prefs.putString("hostname", newName);
-      server.send(200, "text/html",
-        buildConfigPage("&#10003; Saved as &ldquo;" + newName + "&rdquo; — rebooting now..."));
-      delay(2000);
-      ESP.restart();
-    } else {
-      server.send(400, "text/html",
-        buildConfigPage("&#10007; Invalid hostname — please try again."));
+    bool valid = server.hasArg("hostname") && server.arg("hostname").length() > 0;
+    if (!valid) {
+      server.send(400, "text/html", buildConfigPage("&#10007; Invalid hostname — please try again."));
+      return;
     }
+
+    prefs.putString("hostname", server.arg("hostname"));
+
+    if (server.hasArg("ssid") && server.arg("ssid").length() > 0)
+      prefs.putString("ssid", server.arg("ssid"));
+
+    // Only update password if user typed a new one
+    if (server.hasArg("pass") && server.arg("pass").length() > 0)
+      prefs.putString("pass", server.arg("pass"));
+
+    server.send(200, "text/html",
+      buildConfigPage("&#10003; Settings saved — rebooting now..."));
+    delay(2000);
+    prefs.end(); // flush to flash before reboot
+    ESP.restart();
   });
 
   // --- Tally endpoints ---
@@ -242,7 +276,7 @@ void setup() {
     String iface = eth_connected ? "Ethernet" : "WiFi";
     String s     = digitalRead(TALLY_PIN) ? "ON" : "OFF";
     server.send(200, "text/plain",
-      "Tally Bridge v5.2 | " + iface + " IP: " + ip
+      "Tally Bridge " + String(FW_VERSION) + " | " + iface + " IP: " + ip
       + " | Tally: " + s + " | Host: " + activeHostname);
   });
 
