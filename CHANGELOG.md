@@ -4,6 +4,13 @@ All notable changes to the Tally Bridge firmware.
 
 ---
 
+## v5.6 — 2026-05-30
+
+- Tally control card added to web portal
+- Live indicator (red dot + label) reflects current tally state
+- ON / OFF buttons toggle tally instantly via fetch() — no page reload
+- Indicator updates dynamically in the browser without a refresh
+
 ## v5.5 — 2026-05-30
 
 - Tally output pin configurable via web portal

@@ -6,7 +6,7 @@
 #include <Preferences.h>
 
 // --- DEFAULT TALLY PIN (can be overridden via web portal) ---
-const int DEFAULT_activePin = 18;
+const int DEFAULT_TALLY_PIN = 18;
 
 // --- BUTTON PIN ---
 #define BUTTON_PIN 3
@@ -21,7 +21,7 @@ const int DEFAULT_activePin = 18;
 #define ETH_PHY_ADDR    1
 
 // --- FIRMWARE VERSION ---
-const char* FW_VERSION = "v5.5";
+const char* FW_VERSION = "v5.6";
 
 // --- DEFAULTS (used only on first boot, overridden by web portal) ---
 const char* DEFAULT_HOSTNAME = "tally-light";
@@ -137,6 +137,18 @@ String buildConfigPage(String message = "") {
     .lock-row label { margin: 0; display: flex; align-items: center; gap: 5px;
                       color: #888; font-size: 0.85em; white-space: nowrap; cursor: pointer; }
     input:disabled { opacity: 0.4; cursor: not-allowed; }
+    .tally-indicator { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+    .tally-dot { width: 48px; height: 48px; border-radius: 50%; background: #333;
+                 transition: background 0.2s; flex-shrink: 0; }
+    .tally-dot.on { background: #ff2222; box-shadow: 0 0 16px #ff2222aa; }
+    .tally-label { font-size: 1.4em; font-weight: bold; color: #555; }
+    .tally-label.on { color: #ff4444; }
+    .btn-row { display: flex; gap: 10px; }
+    .btn-row button { margin-top: 0; }
+    .btn-on  { background: #ff4444 !important; }
+    .btn-on:hover  { background: #cc3333 !important; }
+    .btn-off { background: #444 !important; }
+    .btn-off:hover { background: #555 !important; }
   </style>
 </head>
 <body>
@@ -160,6 +172,19 @@ String buildConfigPage(String message = "") {
   html += "<div class=\"stat\"><span>Tally Pin</span><span>GPIO" + String(activePin) + "</span></div>";
   html += "<div class=\"stat\"><span>Tally State</span><span>" + tstate + "</span></div>";
   html += "</div>";
+
+  // Tally control card
+  String dotClass   = (tstate == "ON") ? " on" : "";
+  String labelClass = (tstate == "ON") ? " on" : "";
+  html += "<div class=\"card\"><h2>Tally Control</h2>";
+  html += "<div class=\"tally-indicator\">";
+  html += "  <div class=\"tally-dot" + dotClass + "\" id=\"tallyDot\"></div>";
+  html += "  <span class=\"tally-label" + labelClass + "\" id=\"tallyLabel\">TALLY " + tstate + "</span>";
+  html += "</div>";
+  html += "<div class=\"btn-row\">";
+  html += "  <button class=\"btn-on\"  onclick=\"setTally('on')\">ON</button>";
+  html += "  <button class=\"btn-off\" onclick=\"setTally('off')\">OFF</button>";
+  html += "</div></div>";
 
   // Config card
   html += R"rawliteral(
@@ -234,6 +259,15 @@ String buildConfigPage(String message = "") {
     function toggleStatic(el) {
       document.getElementById('staticFields').style.display =
         el.value === 'static' ? 'block' : 'none';
+    }
+    function setTally(state) {
+      fetch('/tally/' + state)
+        .then(() => {
+          var on = state === 'on';
+          document.getElementById('tallyDot').className   = 'tally-dot'   + (on ? ' on' : '');
+          document.getElementById('tallyLabel').className = 'tally-label' + (on ? ' on' : '');
+          document.getElementById('tallyLabel').textContent = 'TALLY ' + state.toUpperCase();
+        });
     }
 )rawliteral";
 
