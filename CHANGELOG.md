@@ -4,6 +4,13 @@ All notable changes to the Tally Bridge firmware.
 
 ---
 
+## v5.5 — 2026-05-30
+
+- Tally output pin configurable via web portal
+- Pin field is locked by default with a checkbox to unlock — prevents accidental changes
+- Active pin shown in status card and serial output on boot
+- `DEFAULT_TALLY_PIN` replaces hardcoded constant; active pin loaded from flash at boot
+
 ## v5.4 — 2026-05-30
 
 - Static IP support — IP, Gateway, Subnet, DNS configurable via web portal

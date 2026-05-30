@@ -5,8 +5,8 @@
 #include <WiFi.h>
 #include <Preferences.h>
 
-// --- TALLY PIN ---
-const int TALLY_PIN = 18;
+// --- DEFAULT TALLY PIN (can be overridden via web portal) ---
+const int DEFAULT_activePin = 18;
 
 // --- BUTTON PIN ---
 #define BUTTON_PIN 3
@@ -21,7 +21,7 @@ const int TALLY_PIN = 18;
 #define ETH_PHY_ADDR    1
 
 // --- FIRMWARE VERSION ---
-const char* FW_VERSION = "v5.4";
+const char* FW_VERSION = "v5.5";
 
 // --- DEFAULTS (used only on first boot, overridden by web portal) ---
 const char* DEFAULT_HOSTNAME = "tally-light";
@@ -34,6 +34,7 @@ String activeSSID;
 String activePass;
 String ipMode;          // "dhcp" or "static"
 IPAddress staticIP, staticGW, staticSN, staticDNS;
+int activePin;
 
 WebServer server(80);
 bool eth_connected = false;
@@ -79,9 +80,9 @@ void NetworkEvent(arduino_event_id_t event) {
 }
 
 void triggerTest() {
-  digitalWrite(TALLY_PIN, HIGH);
+  digitalWrite(activePin, HIGH);
   delay(1000);
-  digitalWrite(TALLY_PIN, LOW);
+  digitalWrite(activePin, LOW);
   Serial.println("TALLY TEST");
 }
 
@@ -90,7 +91,7 @@ void triggerTest() {
 String buildConfigPage(String message = "") {
   String ip     = eth_connected ? ETH.localIP().toString() : WiFi.localIP().toString();
   String iface  = eth_connected ? "Ethernet" : "WiFi";
-  String tstate = digitalRead(TALLY_PIN) ? "ON" : "OFF";
+  String tstate = digitalRead(activePin) ? "ON" : "OFF";
   bool   isStatic = (ipMode == "static");
 
   String html = R"rawliteral(
@@ -131,6 +132,11 @@ String buildConfigPage(String message = "") {
     .note { color: #666; font-size: 0.8em; margin-top: 8px; }
     .divider { border: none; border-top: 1px solid #3a3a3a; margin: 16px 0; }
     #staticFields { display: none; }
+    .lock-row { display: flex; align-items: center; gap: 10px; }
+    .lock-row input[type=text] { flex: 1; }
+    .lock-row label { margin: 0; display: flex; align-items: center; gap: 5px;
+                      color: #888; font-size: 0.85em; white-space: nowrap; cursor: pointer; }
+    input:disabled { opacity: 0.4; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -151,6 +157,7 @@ String buildConfigPage(String message = "") {
   html += "<div class=\"stat\"><span>Interface</span><span>" + iface + "</span></div>";
   html += "<div class=\"stat\"><span>IP Address</span><span>" + ip + "</span></div>";
   html += "<div class=\"stat\"><span>IP Mode</span><span>" + ipMode + "</span></div>";
+  html += "<div class=\"stat\"><span>Tally Pin</span><span>GPIO" + String(activePin) + "</span></div>";
   html += "<div class=\"stat\"><span>Tally State</span><span>" + tstate + "</span></div>";
   html += "</div>";
 
@@ -166,6 +173,14 @@ String buildConfigPage(String message = "") {
   html += "      <input type=\"text\" name=\"hostname\" value=\"" + activeHostname
         + "\" maxlength=\"32\" pattern=\"[a-zA-Z0-9\\-]+\" required>";
   html += "      <p class=\"note\">Letters, numbers, and hyphens only.</p>";
+
+  html += "      <label>Tally Output Pin</label>";
+  html += "      <div class=\"lock-row\">";
+  html += "        <input type=\"text\" name=\"pin\" id=\"pinField\" value=\"" + String(activePin)
+        + "\" maxlength=\"2\" pattern=\"[0-9]+\" disabled>";
+  html += "        <label><input type=\"checkbox\" onchange=\"document.getElementById('pinField').disabled=!this.checked\"> Unlock to edit</label>";
+  html += "      </div>";
+  html += "      <p class=\"note\">Default is GPIO18. Only change if that pin is damaged — GPIO15 is a confirmed substitute. Locked by default to prevent accidental changes.</p>";
 
   html += "      <hr class=\"divider\">";
 
@@ -244,19 +259,21 @@ void setup() {
   activeSSID     = prefs.getString("ssid",     DEFAULT_WIFI_SSID);
   activePass     = prefs.getString("pass",     DEFAULT_WIFI_PASS);
   ipMode         = prefs.getString("ipmode",   "dhcp");
+  activePin      = prefs.getInt("pin", DEFAULT_TALLY_PIN);
 
   staticIP.fromString(prefs.getString("ip",  "192.168.1.100"));
   staticGW.fromString(prefs.getString("gw",  "192.168.1.1"));
   staticSN.fromString(prefs.getString("sn",  "255.255.255.0"));
   staticDNS.fromString(prefs.getString("dns", "8.8.8.8"));
 
-  Serial.println("Hostname: " + activeHostname);
-  Serial.println("IP Mode:  " + ipMode);
+  Serial.println("Hostname:  " + activeHostname);
+  Serial.println("IP Mode:   " + ipMode);
+  Serial.println("Tally Pin: GPIO" + String(activePin));
   if (ipMode == "static")
     Serial.println("Static IP: " + staticIP.toString());
 
-  pinMode(TALLY_PIN, OUTPUT);
-  digitalWrite(TALLY_PIN, HIGH); // default HIGH — tally OFF
+  pinMode(activePin, OUTPUT);
+  digitalWrite(activePin, HIGH); // default HIGH — tally OFF
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
@@ -304,6 +321,9 @@ void setup() {
 
     prefs.putString("hostname", server.arg("hostname"));
 
+    if (server.hasArg("pin") && server.arg("pin").length() > 0)
+      prefs.putInt("pin", server.arg("pin").toInt());
+
     if (server.hasArg("ssid") && server.arg("ssid").length() > 0)
       prefs.putString("ssid", server.arg("ssid"));
     if (server.hasArg("pass") && server.arg("pass").length() > 0)
@@ -337,13 +357,13 @@ void setup() {
 
   // --- Tally endpoints ---
   server.on("/tally/on", HTTP_GET, []() {
-    digitalWrite(TALLY_PIN, HIGH);
+    digitalWrite(activePin, HIGH);
     server.send(200, "text/plain", "Tally ON");
     Serial.println("TALLY ON");
   });
 
   server.on("/tally/off", HTTP_GET, []() {
-    digitalWrite(TALLY_PIN, LOW);
+    digitalWrite(activePin, LOW);
     server.send(200, "text/plain", "Tally OFF");
     Serial.println("TALLY OFF");
   });
@@ -356,7 +376,7 @@ void setup() {
   server.on("/status", HTTP_GET, []() {
     String ip    = eth_connected ? ETH.localIP().toString() : WiFi.localIP().toString();
     String iface = eth_connected ? "Ethernet" : "WiFi";
-    String s     = digitalRead(TALLY_PIN) ? "ON" : "OFF";
+    String s     = digitalRead(activePin) ? "ON" : "OFF";
     server.send(200, "text/plain",
       "Tally Bridge " + String(FW_VERSION) + " | " + iface + " IP: " + ip
       + " | Mode: " + ipMode + " | Tally: " + s + " | Host: " + activeHostname);
